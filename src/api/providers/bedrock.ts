@@ -12,7 +12,12 @@ import { ApiStream } from "../transform/stream"
 import { convertToBedrockConverseMessages } from "../transform/bedrock-converse-format"
 import { BaseProvider } from "./base-provider"
 import { logger } from "../../utils/logging"
-import { isRemoteSSH, doesAwsProfileExist, showRemoteProfileError, getDetailedRemoteProfileErrorMessage } from "../../utils/aws/profile-utils"
+import {
+	isRemoteSSH,
+	doesAwsProfileExist,
+	showRemoteProfileError,
+	getDetailedRemoteProfileErrorMessage,
+} from "../../utils/aws/profile-utils"
 
 /**
  * Validates an AWS Bedrock ARN format and optionally checks if the region in the ARN matches the provided region
@@ -123,30 +128,31 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 		const clientConfig: BedrockRuntimeClientConfig = {
 			region: region,
 		}
-if (this.options.awsUseProfile && this.options.awsProfile) {
-	// Check if running in remote SSH context
-	if (isRemoteSSH()) {
-		// Check if profile exists asynchronously and show warning if it doesn't
-		doesAwsProfileExist(this.options.awsProfile)
-			.then(exists => {
-				if (!exists) {
-					showRemoteProfileError(this.options.awsProfile || 'default');
-				}
+
+		if (this.options.awsUseProfile && this.options.awsProfile) {
+			// Check if running in remote SSH context
+			if (isRemoteSSH()) {
+				// Check if profile exists asynchronously and show warning if it doesn't
+				doesAwsProfileExist(this.options.awsProfile)
+					.then((exists) => {
+						if (!exists) {
+							showRemoteProfileError(this.options.awsProfile || "default")
+						}
+					})
+					.catch((error) => {
+						logger.error("Error checking for AWS profile existence", {
+							ctx: "bedrock",
+							profile: this.options.awsProfile,
+							error: error instanceof Error ? error : String(error),
+						})
+					})
+			}
+
+			// Use profile-based credentials if enabled and profile is set
+			clientConfig.credentials = fromIni({
+				profile: this.options.awsProfile,
 			})
-			.catch(error => {
-				logger.error("Error checking for AWS profile existence", {
-					ctx: "bedrock",
-					profile: this.options.awsProfile,
-					error: error instanceof Error ? error : String(error),
-				});
-			});
-	}
-	
-	// Use profile-based credentials if enabled and profile is set
-	clientConfig.credentials = fromIni({
-		profile: this.options.awsProfile,
-	})
-} else if (this.options.awsAccessKey && this.options.awsSecretKey) {
+		} else if (this.options.awsAccessKey && this.options.awsSecretKey) {
 			// Use direct credentials if provided
 			clientConfig.credentials = {
 				accessKeyId: this.options.awsAccessKey,
@@ -414,20 +420,21 @@ Please check:
 						errorStack: error.stack,
 						errorMessage: error.message,
 					})
-					
+
 					// Check if error is related to credentials and we're in a remote SSH context
-					const errorMessage = error.message.toLowerCase();
-					if ((errorMessage.includes("credentials") ||
-					     errorMessage.includes("profile") ||
-					     errorMessage.includes("not found") ||
-					     errorMessage.includes("cannot load credentials")) &&
-					    this.options.awsUseProfile &&
-					    isRemoteSSH()) {
-						
+					const errorMessage = error.message.toLowerCase()
+					if (
+						(errorMessage.includes("credentials") ||
+							errorMessage.includes("profile") ||
+							errorMessage.includes("not found") ||
+							errorMessage.includes("cannot load credentials")) &&
+						this.options.awsUseProfile &&
+						isRemoteSSH()
+					) {
 						yield {
 							type: "text",
-							text: getDetailedRemoteProfileErrorMessage(this.options.awsProfile || 'default')
-						};
+							text: getDetailedRemoteProfileErrorMessage(this.options.awsProfile || "default"),
+						}
 					} else {
 						yield {
 							type: "text",
@@ -754,17 +761,18 @@ Please check:
 			// Standard error handling
 			if (error instanceof Error) {
 				// Check if error is related to credentials and we're in a remote SSH context
-				const errorMessage = error.message.toLowerCase();
-				if ((errorMessage.includes("credentials") ||
-				     errorMessage.includes("profile") ||
-				     errorMessage.includes("not found") ||
-				     errorMessage.includes("cannot load credentials")) &&
-				    this.options.awsUseProfile &&
-				    isRemoteSSH()) {
-					
-					throw new Error(getDetailedRemoteProfileErrorMessage(this.options.awsProfile || 'default'));
+				const errorMessage = error.message.toLowerCase()
+				if (
+					(errorMessage.includes("credentials") ||
+						errorMessage.includes("profile") ||
+						errorMessage.includes("not found") ||
+						errorMessage.includes("cannot load credentials")) &&
+					this.options.awsUseProfile &&
+					isRemoteSSH()
+				) {
+					throw new Error(getDetailedRemoteProfileErrorMessage(this.options.awsProfile || "default"))
 				} else {
-					throw new Error(`Bedrock completion error: ${error.message}`);
+					throw new Error(`Bedrock completion error: ${error.message}`)
 				}
 			}
 			throw error
